@@ -136,6 +136,27 @@
   .pill-exp { background: rgba(249,115,22,.15); color: var(--orange); }
   .dev-meta { font-size: 12px; color: var(--text-dim); margin-top: 6px; line-height: 1.7; }
 
+  .hist {
+    display: none;
+    margin-top: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .hist.open { display: block; }
+  .hist-row {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 13px; padding: 5px 0;
+    border-bottom: 1px solid rgba(42,51,71,.55);
+  }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-date { color: var(--text); }
+  .hist-time { color: var(--volt); font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; }
+  .hist-day { font-size: 11px; color: var(--text-dim); margin: 8px 0 3px; font-weight: 600; }
+
   .empty { text-align: center; color: var(--text-dim); padding: 26px 10px; font-size: 13.5px; }
 
   #login-screen {
@@ -455,9 +476,64 @@
         .catch(function (e) { toast('מחיקה נכשלה: ' + e.code); });
     }));
 
+    var hist = document.createElement('div');
+    hist.className = 'hist';
+
+    acts.appendChild(button('\ud83d\udd52 \u05d4\u05d9\u05e1\u05d8\u05d5\u05e8\u05d9\u05d4', 'btn btn-outline btn-sm', function () {
+      if (hist.classList.contains('open')) { hist.classList.remove('open'); return; }
+      hist.classList.add('open');
+      hist.innerHTML = '<div class="empty">\u05d8\u05d5\u05e2\u05df\u2026</div>';
+      db.ref('logs/' + id).limitToLast(100).once('value').then(function (snap) {
+        renderHistory(hist, snap.val() || {});
+      }).catch(function (e) {
+        hist.innerHTML = '<div class="empty">\u05e9\u05d2\u05d9\u05d0\u05ea \u05e7\u05e8\u05d9\u05d0\u05d4: ' + e.code + '</div>';
+      });
+    }));
+
     row.appendChild(acts);
+    row.appendChild(hist);
     return row;
   }
+
+  /* Visit history: newest first, grouped by day */
+  function renderHistory(box, map) {
+    var stamps = Object.keys(map).map(function (k) { return Number(map[k]); })
+      .filter(function (n) { return n > 0; })
+      .sort(function (a, b) { return b - a; });
+
+    if (!stamps.length) {
+      box.innerHTML = '<div class="empty">\u05d0\u05d9\u05df \u05e2\u05d3\u05d9\u05d9\u05df \u05db\u05e0\u05d9\u05e1\u05d5\u05ea \u05de\u05ea\u05d5\u05e2\u05d3\u05d5\u05ea.</div>';
+      return;
+    }
+
+    box.innerHTML = '';
+    var head = document.createElement('div');
+    head.className = 'hist-day';
+    head.textContent = '\u05e1\u05d4"\u05db ' + stamps.length + ' \u05db\u05e0\u05d9\u05e1\u05d5\u05ea \u05d0\u05d7\u05e8\u05d5\u05e0\u05d5\u05ea';
+    box.appendChild(head);
+
+    var lastDay = '';
+    stamps.forEach(function (ts) {
+      var d = new Date(ts);
+      var day = pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear();
+      var time = pad(d.getHours()) + ':' + pad(d.getMinutes());
+
+      var r = document.createElement('div');
+      r.className = 'hist-row';
+      var dl = document.createElement('span');
+      dl.className = 'hist-date';
+      dl.textContent = (day === lastDay) ? '' : day;
+      var tl = document.createElement('span');
+      tl.className = 'hist-time';
+      tl.textContent = time;
+      r.appendChild(dl);
+      r.appendChild(tl);
+      box.appendChild(r);
+      lastDay = day;
+    });
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
 
   function field(labelText, type, value) {
     var wrap = document.createElement('div');
