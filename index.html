@@ -508,6 +508,14 @@
     .lic-spinner { animation-duration: 2.5s; }
   }
 
+  .lic-ver-line {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 14px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: .03em;
+  }
+
   /* ---- LICENCE BANNERS ---- */
   #lic-banners { display: none; }
   #lic-banners.lic-on { display: block; }
@@ -557,6 +565,7 @@
       <div class="lic-id-label">מזהה המכשיר</div>
       <div id="lic-device-id" contenteditable="true" spellcheck="false"></div>
     </div>
+    <div class="lic-ver-line" id="lic-gate-ver"></div>
     <div class="lic-actions" id="lic-actions" style="display:none">
       <button class="btn btn-outline btn-sm" id="lic-copy-btn" type="button">📋 העתק</button>
       <button class="btn btn-volt btn-sm" id="lic-retry-btn" type="button">🔄 נסה שוב</button>
@@ -893,6 +902,11 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-volt" onclick="saveSettings()">💾 שמור הגדרות</button>
         <button class="btn btn-danger btn-sm" onclick="resetAllData()">⚠️ מחק הכל</button>
+      </div>
+      <div class="divider"></div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.9">
+        <div>גרסה <span id="lic-ver" style="font-family:ui-monospace,monospace">—</span></div>
+        <div>מזהה מכשיר <span id="lic-ver-dev" style="font-family:ui-monospace,monospace;direction:ltr;user-select:all">—</span></div>
       </div>
     </div>
 
@@ -2408,6 +2422,8 @@ if ('serviceWorker' in navigator) {
     expiryNoticeDays: 30
   };
 
+  var APP_VERSION = '1.0.0';
+
   var DAY = 86400000;
   var K_DEVICE = 'volt_device_id';
   var K_CACHE = 'volt_lic_state';
@@ -2449,6 +2465,22 @@ if ('serviceWorker' in navigator) {
   }
 
   var DEVICE = deviceId();
+
+  (function stampVersion() {
+    var g = document.getElementById('lic-gate-ver');
+    if (g) g.textContent = 'v' + APP_VERSION + ' \u00b7 ' + DEVICE;
+    function fill() {
+      var v = document.getElementById('lic-ver');
+      var d = document.getElementById('lic-ver-dev');
+      if (v) v.textContent = APP_VERSION;
+      if (d) d.textContent = DEVICE;
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fill);
+    } else {
+      fill();
+    }
+  })();
 
   /* ---- Local cache of the last successful verification ---- */
   function readCache() {
@@ -2537,6 +2569,42 @@ if ('serviceWorker' in navigator) {
     } catch (e) {}
   }
 
+  /* Compare dotted version strings. Returns -1, 0 or 1. */
+  function cmpVersion(a, b) {
+    var pa = String(a || '0').split('.');
+    var pb = String(b || '0').split('.');
+    var n = Math.max(pa.length, pb.length);
+    for (var i = 0; i < n; i++) {
+      var x = parseInt(pa[i] || '0', 10) || 0;
+      var y = parseInt(pb[i] || '0', 10) || 0;
+      if (x < y) return -1;
+      if (x > y) return 1;
+    }
+    return 0;
+  }
+
+  /* Purge every cache and service worker, then hard-reload. */
+  function forceUpdate() {
+    var jobs = [];
+    try {
+      if (window.caches && caches.keys) {
+        jobs.push(caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }));
+      }
+    } catch (e) {}
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }));
+      }
+    } catch (e) {}
+    Promise.all(jobs).catch(function () {}).then(function () {
+      location.replace(location.pathname + '?v=' + Date.now());
+    });
+  }
+
   /* ---- Date helpers ---- */
   function todayISO() {
     var d = new Date();
@@ -2613,6 +2681,13 @@ if ('serviceWorker' in navigator) {
         showId: true,
         showActions: true,
         note: note || ''
+      });
+    },
+    update: function () {
+      showGate({
+        title: '\u05e7\u05d9\u05d9\u05dd \u05e2\u05d3\u05db\u05d5\u05df',
+        text: '\u05de\u05ea\u05e7\u05d9\u05df \u05d0\u05ea \u05d4\u05d2\u05e8\u05e1\u05d4 \u05d4\u05d7\u05d3\u05e9\u05d4\u2026 \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05ea\u05d9\u05e4\u05ea\u05d7 \u05de\u05d7\u05d3\u05e9 \u05d1\u05e2\u05d5\u05d3 \u05e8\u05d2\u05e2. <strong>\u05d4\u05e0\u05ea\u05d5\u05e0\u05d9\u05dd \u05e9\u05dc\u05da \u05e0\u05e9\u05de\u05e8\u05d9\u05dd.</strong>',
+        spinner: true
       });
     },
     needNet: function () {
@@ -2755,6 +2830,12 @@ if ('serviceWorker' in navigator) {
           if (res.reason === 'expired') VIEWS.expired(res.expires, res.note);
           else if (res.reason === 'blocked') VIEWS.blocked(res.note);
           else VIEWS.unregistered();
+          return;
+        }
+        var minV = (glob && glob.minVersion) ? String(glob.minVersion) : '';
+        if (minV && cmpVersion(APP_VERSION, minV) < 0) {
+          VIEWS.update();
+          forceUpdate();
           return;
         }
         var gmsg = (glob && typeof glob.message === 'string') ? glob.message : '';
