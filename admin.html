@@ -245,6 +245,19 @@
   </div>
 
   <div class="card">
+    <div class="card-title"><div class="dot" style="background:var(--red)"></div>עדכון גרסה כפוי</div>
+    <div class="field">
+      <label>גרסת מינימום נדרשת (למשל 1.1.0)</label>
+      <input type="text" id="min-version" placeholder="1.0.0" dir="ltr" style="font-family:ui-monospace,monospace">
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:11px">
+      מכשיר שמריץ גרסה נמוכה מזו ינקה את המטמון ויטען מחדש אוטומטית.
+      השאר ריק כדי לבטל. הגרסה מוצגת למשתמש בתחתית מסך ההגדרות.
+    </div>
+    <button class="btn btn-volt btn-sm" id="minver-save">💾 שמור גרסת מינימום</button>
+  </div>
+
+  <div class="card">
     <div class="card-title"><div class="dot" style="background:var(--warn)"></div>מכשירים רשומים <span id="count" style="color:var(--text-dim);font-weight:400"></span></div>
     <div id="list"><div class="empty">טוען…</div></div>
   </div>
@@ -345,6 +358,9 @@
     db.ref('global/message').once('value').then(function (s) {
       el('global-msg').value = s.val() || '';
     }).catch(function () {});
+    db.ref('global/minVersion').once('value').then(function (s) {
+      el('min-version').value = s.val() || '';
+    }).catch(function () {});
   }
 
   el('refresh-btn').addEventListener('click', load);
@@ -372,6 +388,17 @@
   el('global-save').addEventListener('click', function () {
     db.ref('global/message').set(el('global-msg').value.trim()).then(function () {
       toast('ההודעה הגלובלית נשמרה');
+    }).catch(function (e) { toast('שמירה נכשלה: ' + e.code); });
+  });
+
+  el('minver-save').addEventListener('click', function () {
+    var v = el('min-version').value.trim();
+    if (v && !/^[0-9]+(\.[0-9]+){0,3}$/.test(v)) {
+      toast('פורמט גרסה לא תקין - למשל 1.1.0');
+      return;
+    }
+    db.ref('global/minVersion').set(v).then(function () {
+      toast(v ? 'גרסת מינימום נשמרה: ' + v : 'עדכון כפוי בוטל');
     }).catch(function (e) { toast('שמירה נכשלה: ' + e.code); });
   });
 
