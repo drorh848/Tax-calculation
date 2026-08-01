@@ -2490,6 +2490,42 @@ if ('serviceWorker' in navigator) {
       .catch(function (err) { clearTimeout(timer); throw err; });
   }
 
+  var LOG_KEEP = 100;
+  var LOG_TRIM_AT = 110;
+  var visitLogged = false;
+
+  /* Append one timestamp per page load, then prune old entries. */
+  function logVisit() {
+    if (visitLogged) return;
+    visitLogged = true;
+    var base = CFG.dbUrl.replace(/\/+$/, '') + '/logs/' + encodeURIComponent(DEVICE) + '.json';
+    try {
+      fetch(base, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: String(Date.now())
+      }).then(function () { trimLog(base); }).catch(function () {});
+    } catch (e) {}
+  }
+
+  function trimLog(base) {
+    try {
+      fetch(base + '?shallow=true', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (map) {
+          if (!map) return;
+          var keys = Object.keys(map);
+          if (keys.length <= LOG_TRIM_AT) return;
+          keys.sort();
+          var drop = keys.slice(0, keys.length - LOG_KEEP);
+          for (var i = 0; i < drop.length; i++) {
+            fetch(CFG.dbUrl.replace(/\/+$/, '') + '/logs/' + encodeURIComponent(DEVICE) +
+                  '/' + encodeURIComponent(drop[i]) + '.json', { method: 'DELETE' }).catch(function () {});
+          }
+        }).catch(function () {});
+    } catch (e) {}
+  }
+
   function touchLastSeen() {
     var url = CFG.dbUrl.replace(/\/+$/, '') + '/licenses/' + encodeURIComponent(DEVICE) + '/lastSeen.json';
     try {
@@ -2678,6 +2714,10 @@ if ('serviceWorker' in navigator) {
   function offlineFallback() {
     var c = readCache();
     if (!c) { VIEWS.needNet(); return; }
+    if (c.expires && String(c.expires) < todayISO()) {
+      VIEWS.expired(c.expires, c.message || '');
+      return;
+    }
     var age = Date.now() - c.ts;
     if (age < 0) age = 0;
     if (age > CFG.graceTotalDays * DAY) { VIEWS.needNet(); return; }
@@ -2728,6 +2768,7 @@ if ('serviceWorker' in navigator) {
           gmessage: gmsg
         });
         touchLastSeen();
+        logVisit();
         openApp();
         renderBanners({
           offlineDaysLeft: null,
