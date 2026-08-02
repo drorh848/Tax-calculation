@@ -2417,12 +2417,13 @@ if ('serviceWorker' in navigator) {
     dbUrl: 'https://volt-license-default-rtdb.europe-west1.firebasedatabase.app',
     graceSilentDays: 14,
     graceTotalDays: 28,
-    recheckMinutes: 60,
+    recheckMinutes: 2,
+    pollMinutes: 5,
     netTimeoutMs: 9000,
     expiryNoticeDays: 30
   };
 
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.1.0';
 
   var DAY = 86400000;
   var K_DEVICE = 'volt_device_id';
@@ -2911,6 +2912,13 @@ if ('serviceWorker' in navigator) {
   });
 
   window.addEventListener('online', function () { verify(false); });
+
+  /* Poll while the app is open. Skipped when the tab is in the background,
+     so a phone in the pocket generates no traffic. */
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;
+    verify(false);
+  }, CFG.pollMinutes * 60000);
 
   verify(true);
 })();
